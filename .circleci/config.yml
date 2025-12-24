@@ -1,0 +1,68 @@
+version: 2.1
+
+jobs:
+  build-qcow2:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: large
+    environment:
+      IMAGE_SRC: debian-13-genericcloud-amd64-src.qcow2
+      IMAGE_OUT: debian-13-genericcloud-amd64-custom.qcow2
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y libguestfs-tools qemu-utils wget
+            sudo dpkg-statoverride --update --add root root 0644 /boot/vmlinuz-`uname -r`
+            pip install awscli
+
+      - run:
+          name: Download Debian 13 source image
+          command: |
+            wget -q https://cdimage.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2 \
+              -O "${IMAGE_SRC}"
+            ls -lh *.qcow2
+
+      - run:
+          name: Customize image
+          no_output_timeout: 30m
+          command: |
+            sudo ./debian-13.sh "${IMAGE_SRC}"
+
+      - run:
+          name: Compress image
+          no_output_timeout: 30m
+          command: |
+            sudo virt-sparsify --compress "${IMAGE_SRC}" "${IMAGE_OUT}"
+            ls -lh *.qcow2
+
+      - run:
+          name: Prepare artifact
+          command: |
+            mkdir -p artifacts
+            mv "${IMAGE_OUT}" artifacts/
+            cd artifacts && sha256sum *.qcow2 > SHA256SUMS
+            ls -lh artifacts/
+
+      - run:
+          name: Upload to Cloudflare R2
+          command: |
+            BUILD_DATE=$(date +%Y%m%d)
+            aws s3 sync artifacts/ "s3://${R2_BUCKET}/debian-image/${BUILD_DATE}/" \
+              --endpoint-url "${R2_ENDPOINT}"
+
+      - store_artifacts:
+          path: artifacts
+          destination: debian-image
+
+workflows:
+  build:
+    jobs:
+      - build-qcow2:
+          filters:
+            branches:
+              only:
+                - master

@@ -1,0 +1,176 @@
+# Debian 13 (Trixie) LXC 容器镜像定制配置
+# 用于 Proxmox VE LXC 容器模板
+# 构建命令: distrobuilder build-lxc debian13-lxc.yaml
+
+image:
+  distribution: debian
+  release: trixie
+  architecture: amd64
+  description: Debian 13 (Trixie) LXC Custom
+  name: debian-13-lxc-custom-{{image.architecture}}-{{image.serial}}
+  serial: "{{ image.serial }}"
+
+source:
+  downloader: debootstrap
+  url: https://mirrors.ustc.edu.cn/debian
+  keyserver: keyserver.ubuntu.com
+  keys:
+    - "0xA7236886F3CCCAAD148A27F80E98404D386FA1D9" # Debian Archive Automatic Signing Key (13/trixie)
+    - "0x4D64FEC119C2029067D6E791F8D2585B8783D481" # Debian Stable Release Key (13/trixie)
+
+targets:
+  lxc:
+    create_message: |
+      Debian 13 (Trixie) LXC 自定义镜像
+
+    config:
+      - type: all
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/debian.common.conf
+
+      - type: user
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/debian.userns.conf
+
+      - type: all
+        content: |-
+          lxc.arch = {{ image.architecture_personality }}
+
+packages:
+  manager: apt
+  update: true
+  cleanup: true
+
+  sets:
+    - packages:
+        # 基础工具
+        - sudo
+        - bash-completion
+        - locales
+        - ca-certificates
+        - gnupg
+        # 编辑器
+        - vim
+        - nano
+        # 网络工具
+        - curl
+        - wget
+        - axel
+        - net-tools
+        - iputils-ping
+        - iputils-arping
+        - iputils-tracepath
+        - mtr-tiny
+        - dnsutils
+        - ncat
+        - lsof
+        # 压缩工具
+        - unzip
+        - bzip2
+        - zstd
+        # 开发工具
+        - build-essential
+        - git
+        # 终端增强
+        - zsh
+        - tmux
+        - screen
+        - less
+        - htop
+        # SSH
+        - openssh-server
+      action: install
+
+  repositories:
+    - name: sources.list.d/debian.sources
+      url: |-
+        Types: deb
+        URIs: https://mirrors.ustc.edu.cn/debian
+        Suites: trixie trixie-updates trixie-backports
+        Components: main contrib non-free non-free-firmware
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+        Types: deb
+        URIs: https://mirrors.ustc.edu.cn/debian-security
+        Suites: trixie-security
+        Components: main contrib non-free non-free-firmware
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+actions:
+  # 配置时区
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+      echo "Asia/Shanghai" > /etc/timezone
+
+  # 配置 locale
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      sed -i '/^#.*en_US.UTF-8 UTF-8/s/^#//' /etc/locale.gen
+      sed -i '/^#.*zh_CN.UTF-8 UTF-8/s/^#//' /etc/locale.gen
+      locale-gen
+      echo 'LANG=en_US.UTF-8' > /etc/default/locale
+
+  # 配置 NTP
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      mkdir -p /etc/systemd/timesyncd.conf.d
+      cat > /etc/systemd/timesyncd.conf.d/custom-ntp.conf << 'EOF'
+      [Time]
+      NTP=time.apple.com ntp.aliyun.com ntp.tencent.com
+      EOF
+      systemctl enable systemd-timesyncd || true
+
+  # SSH 安全配置
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      sed -i '/^#\?PasswordAuthentication[[:space:]]/c\PasswordAuthentication no' /etc/ssh/sshd_config
+      # 确保 SSH 服务启用
+      systemctl enable ssh || true
+
+  # 创建用户 (可选，按需修改用户名)
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      USERNAME="cyrus"
+
+      # 创建用户
+      useradd -m -s /bin/zsh "${USERNAME}"
+      usermod -aG sudo "${USERNAME}"
+
+      # 配置 sudo 免密 (可选)
+      echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
+      chmod 440 /etc/sudoers.d/${USERNAME}
+
+      # 创建 SSH 目录
+      mkdir -p /home/${USERNAME}/.ssh
+      chmod 700 /home/${USERNAME}/.ssh
+      touch /home/${USERNAME}/.ssh/authorized_keys
+      chmod 600 /home/${USERNAME}/.ssh/authorized_keys
+      chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.ssh
+
+  # 清理
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      apt-get -y autoremove --purge
+      apt-get -y clean
+      rm -rf /var/lib/apt/lists/*
+      rm -rf /var/cache/apt/*
+      rm -rf /var/log/*.log
+      rm -rf /tmp/*
+      # 清空 machine-id，首次启动时重新生成
+      truncate -s 0 /etc/machine-id || true
+
+mappings:
+  architecture_map: debian
