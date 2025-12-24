@@ -3,7 +3,7 @@ version: 2.1
 jobs:
   build-qcow2:
     machine:
-      image: ubuntu-2404:current
+      image: ubuntu-2204:current
     resource_class: large
     environment:
       IMAGE_SRC: debian-13-genericcloud-amd64-src.qcow2
