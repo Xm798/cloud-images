@@ -45,7 +45,7 @@ jobs:
             mkdir -p artifacts
             mv "${IMAGE_OUT}" artifacts/
             cd artifacts && sha256sum *.qcow2 > SHA256SUMS
-            ls -lh artifacts/
+            ls -lh
 
       - run:
           name: Upload to Cloudflare R2
