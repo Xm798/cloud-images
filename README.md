@@ -2,6 +2,13 @@
 
 用于 Proxmox VE 的 Debian 13 自定义镜像构建工具，支持 QEMU/KVM 虚拟机和 LXC 容器。
 
+## 镜像版本
+
+| 脚本 | 用途 | 输出文件 |
+|------|------|----------|
+| `debian-13.sh` | 完整版，含开发工具 | `debian-13-genericcloud-amd64-custom.qcow2` |
+| `debian-13-base.sh` | 基础版，仅网络排查工具 | `debian-13-base-genericcloud-amd64-custom.qcow2` |
+
 ## 功能特性
 
 ### 系统配置
@@ -11,7 +18,7 @@
 - NTP 时间同步 (阿里云、腾讯云、Apple)
 - SSH 安全配置 (禁用密码登录)
 
-### 预装软件
+### 预装软件 (完整版 debian-13.sh)
 
 | 类别 | 软件包 |
 |------|--------|
@@ -21,8 +28,19 @@
 | 压缩工具 | unzip, bzip2, zstd |
 | 开发工具 | build-essential, git |
 | 终端增强 | zsh, tmux, btop/htop |
-| 现代 CLI | fd-find, ripgrep, bat, duf, zoxide, ncdu |
-| 虚拟化 | qemu-guest-agent, spice-vdagent (仅 VM) |
+| 现代 CLI | fd-find, ripgrep, bat, duf, zoxide, ncdu, tree |
+| 虚拟化 | qemu-guest-agent, spice-vdagent |
+
+### 预装软件 (基础版 debian-13-base.sh)
+
+| 类别 | 软件包 |
+|------|--------|
+| 基础工具 | sudo, bash-completion, locales, ca-certificates |
+| 网络工具 | curl, wget, net-tools, iputils-ping/arping/tracepath, mtr-tiny, dnsutils, ncat, tcping |
+| 编辑器 | vim, less |
+| 压缩工具 | unzip, zstd |
+| 系统工具 | lsof |
+| 虚拟化 | qemu-guest-agent, spice-vdagent |
 
 ### 镜像源优化
 
@@ -57,8 +75,9 @@ snap install distrobuilder --classic
 # 1. 下载官方 Cloud 镜像
 wget https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-genericcloud-amd64.qcow2
 
-# 2. 运行自定义脚本
-./debian-13.sh debian-13-genericcloud-amd64.qcow2
+# 2. 运行自定义脚本 (二选一)
+./debian-13.sh debian-13-genericcloud-amd64.qcow2       # 完整版
+./debian-13-base.sh debian-13-genericcloud-amd64.qcow2  # 基础版
 
 # 输出: debian-13-genericcloud-amd64.qcow2 (已修改)
 ```
