@@ -5,9 +5,6 @@ jobs:
     machine:
       image: ubuntu-2204:current
     resource_class: large
-    environment:
-      IMAGE_SRC: debian-13-genericcloud-amd64-src.qcow2
-      IMAGE_OUT: debian-13-genericcloud-amd64-custom.qcow2
     steps:
       - checkout
 
@@ -23,27 +20,30 @@ jobs:
           name: Download Debian 13 source image
           command: |
             wget -q https://cdimage.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2 \
-              -O "${IMAGE_SRC}"
+              -O debian-13-src.qcow2
+            cp debian-13-src.qcow2 debian-13-base-src.qcow2
             ls -lh *.qcow2
 
       - run:
-          name: Customize image
+          name: Customize images
           no_output_timeout: 30m
           command: |
-            sudo ./debian-13.sh "${IMAGE_SRC}"
+            sudo ./debian-13.sh debian-13-src.qcow2
+            sudo ./debian-13-base.sh debian-13-base-src.qcow2
 
       - run:
-          name: Compress image
+          name: Compress images
           no_output_timeout: 30m
           command: |
-            sudo virt-sparsify --compress "${IMAGE_SRC}" "${IMAGE_OUT}"
+            sudo virt-sparsify --compress debian-13-src.qcow2 debian-13-genericcloud-amd64-custom.qcow2
+            sudo virt-sparsify --compress debian-13-base-src.qcow2 debian-13-base-genericcloud-amd64-custom.qcow2
             ls -lh *.qcow2
 
       - run:
-          name: Prepare artifact
+          name: Prepare artifacts
           command: |
             mkdir -p artifacts
-            mv "${IMAGE_OUT}" artifacts/
+            mv debian-13-genericcloud-amd64-custom.qcow2 debian-13-base-genericcloud-amd64-custom.qcow2 artifacts/
             cd artifacts && sha256sum *.qcow2 > SHA256SUMS
             ls -lh
 
