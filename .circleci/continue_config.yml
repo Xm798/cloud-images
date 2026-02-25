@@ -1,13 +1,19 @@
 version: 2.1
 
 parameters:
+  force-all:
+    type: boolean
+    default: false
   build-qcow2:
     type: boolean
     default: false
   build-qcow2-base:
     type: boolean
     default: false
-  build-lxc:
+  build-debian-lxc:
+    type: boolean
+    default: false
+  build-alpine-lxc:
     type: boolean
     default: false
 
@@ -104,7 +110,7 @@ jobs:
           path: artifacts
           destination: debian-13-base
 
-  build-lxc:
+  build-debian-lxc:
     machine:
       image: ubuntu-2204:current
     resource_class: large
@@ -114,9 +120,9 @@ jobs:
       - run:
           name: Install dependencies
           command: |
-            sudo snap install distrobuilder --classic
             sudo apt-get update
-            sudo apt-get install -y debootstrap gpg
+            sudo apt-get install -y snapd debootstrap gpg
+            sudo snap install distrobuilder --classic
             pip install awscli
 
       - run:
@@ -138,6 +144,40 @@ jobs:
           path: artifacts
           destination: debian-13-lxc
 
+  build-alpine-lxc:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y snapd
+            sudo snap install distrobuilder --classic
+            pip install awscli
+
+      - run:
+          name: Build LXC image
+          no_output_timeout: 30m
+          command: sudo distrobuilder build-lxc alpine-lxc.yaml
+
+      - run:
+          name: Upload to Cloudflare R2
+          command: |
+            BUILD_DATE=$(date +%Y%m%d)
+            mkdir -p artifacts
+            mv rootfs.tar.xz meta.tar.xz artifacts/
+            cd artifacts && sha256sum *.tar.* > SHA256SUMS
+            aws s3 sync . "s3://${R2_BUCKET}/alpine-lxc/${BUILD_DATE}/" \
+              --endpoint-url "${R2_ENDPOINT}"
+
+      - store_artifacts:
+          path: artifacts
+          destination: alpine-lxc
+
 workflows:
   build-qcow2:
     when: << pipeline.parameters.build-qcow2 >>
@@ -149,7 +189,12 @@ workflows:
     jobs:
       - build-qcow2-base
 
-  build-lxc:
-    when: << pipeline.parameters.build-lxc >>
+  build-debian-lxc:
+    when: << pipeline.parameters.build-debian-lxc >>
     jobs:
-      - build-lxc
+      - build-debian-lxc
+
+  build-alpine-lxc:
+    when: << pipeline.parameters.build-alpine-lxc >>
+    jobs:
+      - build-alpine-lxc

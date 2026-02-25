@@ -2,11 +2,19 @@ version: 2.1
 
 setup: true
 
+parameters:
+  force-all:
+    type: boolean
+    default: false
+
 orbs:
-  path-filtering: circleci/path-filtering@1.1.0
+  path-filtering: circleci/path-filtering@1.3.0
+  continuation: circleci/continuation@1.0.0
 
 workflows:
   setup:
+    when:
+      not: << pipeline.parameters.force-all >>
     jobs:
       - path-filtering/filter:
           base-revision: master
@@ -14,8 +22,16 @@ workflows:
           mapping: |
             debian-13.sh build-qcow2 true
             debian-13-base.sh build-qcow2-base true
-            debian-13-lxc.yaml build-lxc true
+            debian-13-lxc.yaml build-debian-lxc true
+            alpine-lxc.yaml build-alpine-lxc true
           filters:
             branches:
               only:
                 - master
+
+  force-all:
+    when: << pipeline.parameters.force-all >>
+    jobs:
+      - continuation/continue:
+          configuration_path: .circleci/continue_config.yml
+          parameters: '{"build-qcow2": true, "build-qcow2-base": true, "build-debian-lxc": true, "build-alpine-lxc": true}'

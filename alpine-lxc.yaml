@@ -1,0 +1,106 @@
+# Alpine Linux 3.21 LXC custom image for Proxmox VE
+# Build: distrobuilder build-lxc alpine-lxc.yaml
+
+image:
+  distribution: alpinelinux
+  release: "3.21"
+  architecture: amd64
+  description: Alpine Linux 3.21 LXC Custom
+  name: alpine-3.21-lxc-custom-{{image.architecture}}-{{image.serial}}
+  serial: "{{ image.serial }}"
+
+source:
+  downloader: alpinelinux-http
+  url: https://dl-cdn.alpinelinux.org/alpine
+
+targets:
+  lxc:
+    create_message: |
+      Alpine Linux 3.21 LXC Custom Image
+
+    config:
+      - type: all
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/alpine.common.conf
+
+      - type: user
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/alpine.userns.conf
+
+      - type: all
+        content: |-
+          lxc.arch = {{ image.architecture_personality }}
+
+packages:
+  manager: apk
+  update: true
+  cleanup: true
+
+  sets:
+    - packages:
+        - openssh
+        - rsync
+        - vim
+        - zsh
+        - tree
+        - curl
+        - wget
+        - zstd
+        - zip
+        - unzip
+        - tzdata
+        - musl-locales
+        - musl-locales-lang
+      action: install
+
+actions:
+  # Replace mirrors with USTC
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+
+  # Timezone
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+      echo "Asia/Shanghai" > /etc/timezone
+
+  # Locale
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      echo 'export LANG=en_US.UTF-8' >> /etc/profile
+
+  # SSH
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      sed -i '/^#\?MaxAuthTries[[:space:]]/c\MaxAuthTries 15' /etc/ssh/sshd_config
+      rc-update add sshd default
+
+  # Login banner with IP address
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      echo "IPv4: \\4" >> /etc/issue
+
+  # Cleanup
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+      rm -rf /var/cache/apk/*
+      rm -rf /var/log/*.log
+      rm -rf /tmp/*
+      rm -f /etc/ssh/ssh_host_*
+      truncate -s 0 /etc/machine-id || true
+
+mappings:
+  architecture_map: alpinelinux
