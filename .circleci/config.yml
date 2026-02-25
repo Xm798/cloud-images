@@ -1,67 +1,20 @@
 version: 2.1
 
-jobs:
-  build-qcow2:
-    machine:
-      image: ubuntu-2204:current
-    resource_class: large
-    steps:
-      - checkout
+setup: true
 
-      - run:
-          name: Install dependencies
-          command: |
-            sudo apt-get update
-            sudo apt-get install -y libguestfs-tools qemu-utils wget
-            sudo dpkg-statoverride --update --add root root 0644 /boot/vmlinuz-`uname -r`
-            pip install awscli
-
-      - run:
-          name: Download Debian 13 source image
-          command: |
-            wget -q https://cdimage.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2 \
-              -O debian-13-src.qcow2
-            cp debian-13-src.qcow2 debian-13-base-src.qcow2
-            ls -lh *.qcow2
-
-      - run:
-          name: Customize images
-          no_output_timeout: 30m
-          command: |
-            sudo ./debian-13.sh debian-13-src.qcow2
-            sudo ./debian-13-base.sh debian-13-base-src.qcow2
-
-      - run:
-          name: Compress images
-          no_output_timeout: 30m
-          command: |
-            sudo virt-sparsify --compress debian-13-src.qcow2 debian-13-genericcloud-amd64-custom.qcow2
-            sudo virt-sparsify --compress debian-13-base-src.qcow2 debian-13-base-genericcloud-amd64-custom.qcow2
-            ls -lh *.qcow2
-
-      - run:
-          name: Prepare artifacts
-          command: |
-            mkdir -p artifacts
-            mv debian-13-genericcloud-amd64-custom.qcow2 debian-13-base-genericcloud-amd64-custom.qcow2 artifacts/
-            cd artifacts && sha256sum *.qcow2 > SHA256SUMS
-            ls -lh
-
-      - run:
-          name: Upload to Cloudflare R2
-          command: |
-            BUILD_DATE=$(date +%Y%m%d)
-            aws s3 sync artifacts/ "s3://${R2_BUCKET}/debian-image/${BUILD_DATE}/" \
-              --endpoint-url "${R2_ENDPOINT}"
-
-      - store_artifacts:
-          path: artifacts
-          destination: debian-image
+orbs:
+  path-filtering: circleci/path-filtering@1.1.0
 
 workflows:
-  build:
+  setup:
     jobs:
-      - build-qcow2:
+      - path-filtering/filter:
+          base-revision: master
+          config-path: .circleci/continue_config.yml
+          mapping: |
+            debian-13.sh build-qcow2 true
+            debian-13-base.sh build-qcow2-base true
+            debian-13-lxc.yaml build-lxc true
           filters:
             branches:
               only:

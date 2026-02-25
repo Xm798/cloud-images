@@ -12,11 +12,12 @@ image:
 
 source:
   downloader: debootstrap
-  url: https://mirrors.ustc.edu.cn/debian
+  url: https://deb.debian.org/debian
   keyserver: keyserver.ubuntu.com
   keys:
-    - "0xA7236886F3CCCAAD148A27F80E98404D386FA1D9" # Debian Archive Automatic Signing Key (13/trixie)
-    - "0x4D64FEC119C2029067D6E791F8D2585B8783D481" # Debian Stable Release Key (13/trixie)
+    - "0x04B54C3CDCA79751B16BC6B5225629DF75B188BD" # Debian Archive Signing Key (13/trixie)
+    - "0x5E04A1E3223A19A20706E20F9904613D4CCE68C6" # Debian Security Archive Signing Key (13/trixie)
+    - "0x41587F7DB8C774BCCF131416762F67A0B2C39DE4" # Debian Release Key (13/trixie)
 
 targets:
   lxc:
@@ -43,41 +44,17 @@ packages:
 
   sets:
     - packages:
-        # 基础工具
-        - sudo
-        - bash-completion
-        - locales
-        - ca-certificates
-        - gnupg
-        # 编辑器
         - vim
-        - nano
-        # 网络工具
+        - zsh
+        - tree
         - curl
         - wget
-        - axel
-        - net-tools
-        - iputils-ping
-        - iputils-arping
-        - iputils-tracepath
-        - mtr-tiny
-        - dnsutils
-        - ncat
-        - lsof
-        # 压缩工具
-        - unzip
-        - bzip2
+        - ufw
         - zstd
-        # 开发工具
-        - build-essential
-        - git
-        # 终端增强
-        - zsh
-        - tmux
-        - screen
-        - less
-        - htop
-        # SSH
+        - zip
+        - unzip
+        - locales
+        - rsync
         - openssh-server
       action: install
 
@@ -85,18 +62,25 @@ packages:
     - name: sources.list.d/debian.sources
       url: |-
         Types: deb
-        URIs: https://mirrors.ustc.edu.cn/debian
+        URIs: https://deb.debian.org/debian
         Suites: trixie trixie-updates trixie-backports
         Components: main contrib non-free non-free-firmware
         Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
         Types: deb
-        URIs: https://mirrors.ustc.edu.cn/debian-security
+        URIs: https://deb.debian.org/debian-security
         Suites: trixie-security
         Components: main contrib non-free non-free-firmware
         Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
 actions:
+  # 替换为 USTC 镜像源
+  - trigger: post-packages
+    action: |-
+      #!/bin/bash
+      set -eux
+      sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+
   # 配置时区
   - trigger: post-packages
     action: |-
@@ -115,48 +99,13 @@ actions:
       locale-gen
       echo 'LANG=en_US.UTF-8' > /etc/default/locale
 
-  # 配置 NTP
+  # SSH 配置
   - trigger: post-packages
     action: |-
       #!/bin/bash
       set -eux
-      mkdir -p /etc/systemd/timesyncd.conf.d
-      cat > /etc/systemd/timesyncd.conf.d/custom-ntp.conf << 'EOF'
-      [Time]
-      NTP=time.apple.com ntp.aliyun.com ntp.tencent.com
-      EOF
-      systemctl enable systemd-timesyncd || true
-
-  # SSH 安全配置
-  - trigger: post-packages
-    action: |-
-      #!/bin/bash
-      set -eux
-      sed -i '/^#\?PasswordAuthentication[[:space:]]/c\PasswordAuthentication no' /etc/ssh/sshd_config
-      # 确保 SSH 服务启用
+      sed -i '/^#\?MaxAuthTries[[:space:]]/c\MaxAuthTries 15' /etc/ssh/sshd_config
       systemctl enable ssh || true
-
-  # 创建用户 (可选，按需修改用户名)
-  - trigger: post-packages
-    action: |-
-      #!/bin/bash
-      set -eux
-      USERNAME="cyrus"
-
-      # 创建用户
-      useradd -m -s /bin/zsh "${USERNAME}"
-      usermod -aG sudo "${USERNAME}"
-
-      # 配置 sudo 免密 (可选)
-      echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}
-      chmod 440 /etc/sudoers.d/${USERNAME}
-
-      # 创建 SSH 目录
-      mkdir -p /home/${USERNAME}/.ssh
-      chmod 700 /home/${USERNAME}/.ssh
-      touch /home/${USERNAME}/.ssh/authorized_keys
-      chmod 600 /home/${USERNAME}/.ssh/authorized_keys
-      chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.ssh
 
   # 清理
   - trigger: post-packages

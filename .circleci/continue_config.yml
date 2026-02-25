@@ -1,0 +1,155 @@
+version: 2.1
+
+parameters:
+  build-qcow2:
+    type: boolean
+    default: false
+  build-qcow2-base:
+    type: boolean
+    default: false
+  build-lxc:
+    type: boolean
+    default: false
+
+jobs:
+  build-qcow2:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y libguestfs-tools qemu-utils wget
+            sudo dpkg-statoverride --update --add root root 0644 /boot/vmlinuz-`uname -r`
+            pip install awscli
+
+      - run:
+          name: Download Debian 13 source image
+          command: |
+            wget -q https://cdimage.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2 \
+              -O debian-13-src.qcow2
+
+      - run:
+          name: Customize image
+          no_output_timeout: 30m
+          command: sudo ./debian-13.sh debian-13-src.qcow2
+
+      - run:
+          name: Compress image
+          no_output_timeout: 30m
+          command: |
+            sudo virt-sparsify --compress debian-13-src.qcow2 debian-13-genericcloud-amd64-custom.qcow2
+
+      - run:
+          name: Upload to Cloudflare R2
+          command: |
+            BUILD_DATE=$(date +%Y%m%d)
+            mkdir -p artifacts
+            mv debian-13-genericcloud-amd64-custom.qcow2 artifacts/
+            cd artifacts && sha256sum *.qcow2 > SHA256SUMS
+            aws s3 sync . "s3://${R2_BUCKET}/debian-13/${BUILD_DATE}/" \
+              --endpoint-url "${R2_ENDPOINT}"
+
+      - store_artifacts:
+          path: artifacts
+          destination: debian-13
+
+  build-qcow2-base:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y libguestfs-tools qemu-utils wget
+            sudo dpkg-statoverride --update --add root root 0644 /boot/vmlinuz-`uname -r`
+            pip install awscli
+
+      - run:
+          name: Download Debian 13 source image
+          command: |
+            wget -q https://cdimage.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2 \
+              -O debian-13-base-src.qcow2
+
+      - run:
+          name: Customize image
+          no_output_timeout: 30m
+          command: sudo ./debian-13-base.sh debian-13-base-src.qcow2
+
+      - run:
+          name: Compress image
+          no_output_timeout: 30m
+          command: |
+            sudo virt-sparsify --compress debian-13-base-src.qcow2 debian-13-base-genericcloud-amd64-custom.qcow2
+
+      - run:
+          name: Upload to Cloudflare R2
+          command: |
+            BUILD_DATE=$(date +%Y%m%d)
+            mkdir -p artifacts
+            mv debian-13-base-genericcloud-amd64-custom.qcow2 artifacts/
+            cd artifacts && sha256sum *.qcow2 > SHA256SUMS
+            aws s3 sync . "s3://${R2_BUCKET}/debian-13-base/${BUILD_DATE}/" \
+              --endpoint-url "${R2_ENDPOINT}"
+
+      - store_artifacts:
+          path: artifacts
+          destination: debian-13-base
+
+  build-lxc:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    steps:
+      - checkout
+
+      - run:
+          name: Install dependencies
+          command: |
+            sudo snap install distrobuilder --classic
+            sudo apt-get update
+            sudo apt-get install -y debootstrap gpg
+            pip install awscli
+
+      - run:
+          name: Build LXC image
+          no_output_timeout: 30m
+          command: sudo distrobuilder build-lxc debian-13-lxc.yaml
+
+      - run:
+          name: Upload to Cloudflare R2
+          command: |
+            BUILD_DATE=$(date +%Y%m%d)
+            mkdir -p artifacts
+            mv rootfs.tar.xz meta.tar.xz artifacts/
+            cd artifacts && sha256sum *.tar.* > SHA256SUMS
+            aws s3 sync . "s3://${R2_BUCKET}/debian-13-lxc/${BUILD_DATE}/" \
+              --endpoint-url "${R2_ENDPOINT}"
+
+      - store_artifacts:
+          path: artifacts
+          destination: debian-13-lxc
+
+workflows:
+  build-qcow2:
+    when: << pipeline.parameters.build-qcow2 >>
+    jobs:
+      - build-qcow2
+
+  build-qcow2-base:
+    when: << pipeline.parameters.build-qcow2-base >>
+    jobs:
+      - build-qcow2-base
+
+  build-lxc:
+    when: << pipeline.parameters.build-lxc >>
+    jobs:
+      - build-lxc
