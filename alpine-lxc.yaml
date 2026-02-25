@@ -1,12 +1,12 @@
-# Alpine Linux 3.21 LXC custom image for Proxmox VE
+# Alpine Linux LXC custom image for Proxmox VE
 # Build: distrobuilder build-lxc alpine-lxc.yaml
 
 image:
   distribution: alpinelinux
-  release: "3.21"
+  release: "3.23"
   architecture: amd64
-  description: Alpine Linux 3.21 LXC Custom
-  name: alpine-3.21-lxc-custom-{{image.architecture}}-{{image.serial}}
+  description: Alpine Linux 3.23 LXC Custom
+  name: alpine-3.23-lxc-custom-{{image.architecture}}-{{image.serial}}
   serial: "{{ image.serial }}"
 
 source:
@@ -16,7 +16,7 @@ source:
 targets:
   lxc:
     create_message: |
-      Alpine Linux 3.21 LXC Custom Image
+      Alpine Linux 3.23 LXC Custom Image
 
     config:
       - type: all
