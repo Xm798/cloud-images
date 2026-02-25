@@ -51,6 +51,7 @@ packages:
         - tzdata
         - musl-locales
         - musl-locales-lang
+        - openrc
       action: install
 
 actions:

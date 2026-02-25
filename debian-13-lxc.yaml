@@ -57,28 +57,26 @@ packages:
         - openssh-server
       action: install
 
-  repositories:
-    - name: sources.list.d/debian.sources
-      url: |-
-        Types: deb
-        URIs: https://deb.debian.org/debian
-        Suites: trixie trixie-updates trixie-backports
-        Components: main contrib non-free non-free-firmware
-        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-
-        Types: deb
-        URIs: https://deb.debian.org/debian-security
-        Suites: trixie-security
-        Components: main contrib non-free non-free-firmware
-        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-
 actions:
-  # Replace mirrors with USTC
+  # Write DEB822 sources with USTC mirror and remove legacy sources.list
   - trigger: post-packages
     action: |-
       #!/bin/bash
       set -eux
-      sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+      rm -f /etc/apt/sources.list
+      cat > /etc/apt/sources.list.d/debian.sources <<'EOF'
+      Types: deb
+      URIs: http://mirrors.ustc.edu.cn/debian
+      Suites: trixie trixie-updates
+      Components: main contrib non-free non-free-firmware
+      Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+      Types: deb
+      URIs: http://mirrors.ustc.edu.cn/debian-security
+      Suites: trixie-security
+      Components: main contrib non-free non-free-firmware
+      Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+      EOF
 
   # Timezone
   - trigger: post-packages
